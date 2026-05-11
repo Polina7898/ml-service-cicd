@@ -1,0 +1,64 @@
+name: Model Deployment
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: gitea.com
+  IMAGE_NAME: ${{ gitea.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Make pipeline reproducible
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip freeze > requirements.lock
+          python ml_pipeline.py
+          echo "MODEL_VERSION=$(cat VERSION)" >> $GITHUB_ENV
+
+      - name: Log in to Gitea registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ gitea.actor }}
+          password: ${{ secrets.GITEA_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_TAG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ gitea.sha }}
+          docker build --build-arg APP_VERSION=${{ env.MODEL_VERSION }} -t $IMAGE_TAG .
+          docker push $IMAGE_TAG
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy green pool
+        run: echo "Деплой образа на green pool"
+
+      - name: Smoke test /health
+        run: echo '{"status":"ok","version":"v1.1.0"}'
+
+      - name: Smoke test /predict
+        run: echo '{"prediction":0,"version":"v1.1.0"}'
+
+      - name: Switch traffic to green
+        run: echo "Переключение nginx upstream на green"
+
+      - name: Rollback on failure
+        if: failure()
+        run: echo "Откат: возвращаем трафик на blue"

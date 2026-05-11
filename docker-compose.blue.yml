@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  ml-blue:
+    image: ghcr.io/pmasljukova/ml-service:v1.0.0
+    build:
+      context: .
+      args:
+        APP_VERSION: v1.0.0
+    container_name: ml-blue
+    environment:
+      APP_VERSION: v1.0.0
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mlnet
+
+  nginx:
+    image: nginx:1.25-alpine
+    depends_on:
+      ml-blue:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    networks:
+      - mlnet
+
+networks:
+  mlnet:
+    driver: bridge

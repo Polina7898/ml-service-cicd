@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.cache/
+model.joblib
+metrics.json
+requirements.lock
+.ipynb_checkpoints/
+.DS_Store
